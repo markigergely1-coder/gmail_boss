@@ -6,7 +6,12 @@ import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 // For local emulator testing, this can be largely empty/dummy, but good to have a real one eventually.
 const firebaseConfig = {
   projectId: "boss-ca4b6",
-  // Other fields would be populated from your Firebase Console if deploying to production
+  appId: "1:890558664908:web:2ff2a2a065a1f82cd87269",
+  storageBucket: "boss-ca4b6.firebasestorage.app",
+  apiKey: "AIzaSyDuxs4v5R_eaS8hd1oyu30v8UAH-wobBPU",
+  authDomain: "boss-ca4b6.firebaseapp.com",
+  messagingSenderId: "890558664908",
+  projectNumber: "890558664908",
 };
 
 // Initialize Firebase
