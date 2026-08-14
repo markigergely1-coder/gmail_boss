@@ -95,10 +95,12 @@ def handle_invoice_parser(service, parameters):
         return "Hiba: A target_db nincs inicializálva! (Hiányzik a target_db_key.json?)"
         
     query_string = f"from:{target_email} subject:számla has:attachment filename:pdf"
+    is_retroactive = parameters.get('retroactive', False)
+    max_results = 10 if is_retroactive else 1
     
     try:
-        # Search for the latest 10 emails
-        results = service.users().messages().list(userId='me', q=query_string, maxResults=10).execute()
+        # Search for the latest emails based on mode
+        results = service.users().messages().list(userId='me', q=query_string, maxResults=max_results).execute()
         messages = results.get('messages', [])
         
         if not messages:

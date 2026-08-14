@@ -31,6 +31,7 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
 
   // Invoice Parser UI State
   const [invoiceEmail, setInvoiceEmail] = useState("");
+  const [invoiceRetroactive, setInvoiceRetroactive] = useState(false);
 
   // Keep local states in sync if they change externally
   useEffect(() => {
@@ -42,6 +43,7 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
       setFilterSubject(script.parameters?.subject || "");
     } else if (script.script_id === 'invoice_parser') {
       setInvoiceEmail(script.parameters?.email || "");
+      setInvoiceRetroactive(script.parameters?.retroactive || false);
     }
   }, [script.parameters, script.script_id]);
 
@@ -96,7 +98,8 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
         };
       } else if (script.script_id === 'invoice_parser') {
         newParams = {
-          email: invoiceEmail
+          email: invoiceEmail,
+          retroactive: invoiceRetroactive
         };
       } else {
         newParams = JSON.parse(paramText);
@@ -256,9 +259,22 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
                       className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
                     />
                   </div>
+                  <div className="flex items-center space-x-2 pt-2">
+                    <input 
+                      type="checkbox"
+                      id={`retroactive-${script.id}`}
+                      checked={invoiceRetroactive}
+                      onChange={(e) => setInvoiceRetroactive(e.target.checked)}
+                      className="rounded border-slate-700 bg-slate-950/50 text-brand-500 focus:ring-brand-500"
+                    />
+                    <label htmlFor={`retroactive-${script.id}`} className="text-xs font-medium text-slate-400 cursor-pointer">
+                      Fail-Safe Mód: Visszamenőleges ellenőrzés (Utolsó 10 levélből)
+                    </label>
+                  </div>
                   <p className="text-[10px] text-slate-500 leading-tight">
-                    Ez a szkript megkeresi a legújabb e-mailt ettől a feladótól, aminek a tárgya "számla", 
-                    és kiolvassa a csatolt PDF tartalmát.
+                    {invoiceRetroactive 
+                      ? 'Bekapcsolva: Az utolsó 10 "számla" tárgyú levelet nézi végig, hogy bepótolja a hiányzókat.' 
+                      : 'Kikapcsolva: Csak a legfrissebb számlát ellenőrzi a leggyorsabb működés érdekében.'}
                   </p>
                 </div>
               ) : (
