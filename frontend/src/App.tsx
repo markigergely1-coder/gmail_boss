@@ -3,13 +3,15 @@ import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from './firebase';
 import type { ScriptConfig } from './types';
 import { ScriptCard } from './components/ScriptCard';
-import { Inbox, Settings, Activity } from 'lucide-react';
+import { CreateScriptModal } from './components/CreateScriptModal';
+import { Inbox, Settings, Activity, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 function App() {
   const [scripts, setScripts] = useState<ScriptConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, 'scripts_config'));
@@ -39,25 +41,38 @@ function App() {
   return (
     <div className="min-h-screen p-6 md:p-12 max-w-7xl mx-auto">
       {/* Header */}
-      <header className="mb-12">
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center space-x-4 mb-2"
+      <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center space-x-4 mb-2"
+          >
+            <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/20">
+              <Inbox className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-4xl font-extrabold tracking-tight text-white">Gmail Boss</h1>
+          </motion.div>
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="text-slate-400 text-lg ml-16"
+          >
+            Serverless Email Automation Engine
+          </motion.p>
+        </div>
+        
+        <motion.button
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2 }}
+          onClick={() => setIsModalOpen(true)}
+          className="bg-brand-600 hover:bg-brand-500 text-white px-6 py-3 rounded-xl font-semibold shadow-lg shadow-brand-500/20 flex items-center transition-all self-start md:self-auto"
         >
-          <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/20">
-            <Inbox className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-white">Gmail Boss</h1>
-        </motion.div>
-        <motion.p 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="text-slate-400 text-lg ml-16"
-        >
-          Serverless Email Automation Engine
-        </motion.p>
+          <Plus className="w-5 h-5 mr-2" />
+          Új Szkript Hozzáadása
+        </motion.button>
       </header>
 
       {/* Main Content */}
@@ -84,6 +99,11 @@ function App() {
           </div>
         )}
       </main>
+
+      <CreateScriptModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+      />
     </div>
   );
 }
