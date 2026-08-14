@@ -3,6 +3,10 @@ from firebase_functions import scheduler_fn, https_fn
 from google.cloud.firestore_v1.base_query import FieldFilter
 from datetime import datetime, timezone
 import time
+import PyPDF2
+import io
+import base64
+import re
 
 # Initialize once globally
 initialize_app()
@@ -63,6 +67,114 @@ def handle_test_script(service, parameters):
     except Exception as e:
         return f"Hiba az e-mailek lekérdezésekor: {e}"
 
+def handle_invoice_parser(service, parameters):
+    """
+    Searches for 'számla' from a target email, downloads the PDF attachment,
+    and parses it for the Invoice Amount, Date, and ID.
+    """
+    target_email = parameters.get('email', '').strip()
+    if not target_email:
+        return "Kérlek, add meg a feladó e-mail címét a kereséshez!"
+        
+    query_string = f"from:{target_email} subject:számla has:attachment filename:pdf"
+    
+    try:
+        # Search for the latest email with a PDF attachment
+        results = service.users().messages().list(userId='me', q=query_string, maxResults=1).execute()
+        messages = results.get('messages', [])
+        
+        if not messages:
+            return f"Nem található számla (PDF csatolmány) ettől a feladótól:\n'{target_email}'"
+            
+        msg_id = messages[0]['id']
+        msg = service.users().messages().get(userId='me', id=msg_id).execute()
+        
+        # Find PDF attachment
+        pdf_part = None
+        
+        # The payload might be nested in 'parts'
+        parts = msg.get('payload', {}).get('parts', [])
+        for part in parts:
+            if part.get('filename', '').lower().endswith('.pdf'):
+                pdf_part = part
+                break
+                
+        if not pdf_part:
+            # Sometimes parts are nested inside 'multipart/related' or 'multipart/mixed'
+            def find_pdf_recursive(parts_list):
+                for p in parts_list:
+                    if p.get('filename', '').lower().endswith('.pdf'):
+                        return p
+                    if 'parts' in p:
+                        found = find_pdf_recursive(p['parts'])
+                        if found:
+                            return found
+                return None
+            pdf_part = find_pdf_recursive(parts)
+            
+        if not pdf_part:
+            return "Az e-mailben nem található PDF csatolmány."
+            
+        attachment_id = pdf_part['body'].get('attachmentId')
+        if not attachment_id:
+            return "Nem sikerült azonosítani a PDF csatolmányt."
+            
+        # Download attachment
+        attachment = service.users().messages().attachments().get(
+            userId='me', messageId=msg_id, id=attachment_id
+        ).execute()
+        
+        file_data = base64.urlsafe_b64decode(attachment['data'])
+        
+        # Parse PDF
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_data))
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+            
+        # Extract Amount using JS-ported regex
+        amount = None
+        amount_regex = re.search(r"(Végösszeg|Fizetendő|Összesen)\s*:?\s*([\d\s\.]+)\s*(Ft|HUF)", text, re.IGNORECASE)
+        if amount_regex:
+            amount_str = re.sub(r"[\s\.\xa0]", "", amount_regex.group(2))
+            try:
+                amount = int(amount_str)
+            except:
+                pass
+                
+        if amount is None:
+            # Fallback regex
+            alt_regexes = re.finditer(r"(?<!\d)([\d\s\.]+)\s*(Ft|HUF)", text, re.IGNORECASE)
+            last_match = None
+            for match in alt_regexes:
+                last_match = match
+            if last_match:
+                amount_str = re.sub(r"[\s\.\xa0]", "", last_match.group(1))
+                try:
+                    amount = int(amount_str)
+                except:
+                    pass
+                    
+        # Basic extractions for Date and ID (Fallback simple logic)
+        date_match = re.search(r"(20\d{2}[\.\-][01]\d[\.\-][0-3]\d)", text)
+        invoice_date = date_match.group(1) if date_match else "Nem található dátum"
+        
+        id_match = re.search(r"(Számlaszám|Sorszám|Bizonylatszám)\s*:?\s*([A-Z0-9\-\/]+)", text, re.IGNORECASE)
+        invoice_id = id_match.group(2) if id_match else "Nem található azonosító"
+        
+        amount_display = f"{amount} Ft" if amount else "Nem található összeg"
+        
+        output = (
+            f"📄 PDF Számla Feldolgozva!\n\n"
+            f"💰 Összeg: {amount_display}\n"
+            f"📅 Dátum: {invoice_date}\n"
+            f"🧾 Azonosító: {invoice_id}"
+        )
+        return output
+        
+    except Exception as e:
+        return f"Hiba a PDF számla feldolgozásakor: {e}"
+
 def execute_script(script_config, db):
     """
     Executes the actual Gmail logic based on the script ID and updates last_run and last_output.
@@ -81,6 +193,8 @@ def execute_script(script_config, db):
         # Router
         if script_id == 'test_script':
             output_msg = handle_test_script(service, parameters)
+        elif script_id == 'invoice_parser':
+            output_msg = handle_invoice_parser(service, parameters)
         else:
             output_msg = f"Unknown script_id: {script_id}"
             

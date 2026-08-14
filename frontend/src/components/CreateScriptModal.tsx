@@ -105,7 +105,7 @@ export const CreateScriptModal: React.FC<CreateScriptModalProps> = ({ isOpen, on
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-brand-500 transition-colors appearance-none cursor-pointer"
                     >
                       <option value="test_script">E-mail Szűrő (test_script)</option>
-                      {/* Jövőbeli szkriptek ide kerülnek */}
+                      <option value="invoice_parser">Csatolmány Számla Olvasó (invoice_parser)</option>
                     </select>
                   </div>
                   

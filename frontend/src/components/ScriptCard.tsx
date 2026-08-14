@@ -29,6 +29,9 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
   const [filterEmail, setFilterEmail] = useState("");
   const [filterSubject, setFilterSubject] = useState("");
 
+  // Invoice Parser UI State
+  const [invoiceEmail, setInvoiceEmail] = useState("");
+
   // Keep local states in sync if they change externally
   useEffect(() => {
     setParamText(JSON.stringify(script.parameters || {}, null, 2));
@@ -37,6 +40,8 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
       setFilterName(script.parameters?.name || "");
       setFilterEmail(script.parameters?.email || "");
       setFilterSubject(script.parameters?.subject || "");
+    } else if (script.script_id === 'invoice_parser') {
+      setInvoiceEmail(script.parameters?.email || "");
     }
   }, [script.parameters, script.script_id]);
 
@@ -88,6 +93,10 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
           name: filterName,
           email: filterEmail,
           subject: filterSubject
+        };
+      } else if (script.script_id === 'invoice_parser') {
+        newParams = {
+          email: invoiceEmail
         };
       } else {
         newParams = JSON.parse(paramText);
@@ -234,6 +243,23 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
                       className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
                     />
                   </div>
+                </div>
+              ) : script.script_id === 'invoice_parser' ? (
+                <div className="space-y-3 bg-slate-900/80 rounded-xl border border-slate-800 p-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Feladó E-mail Címe (Kötelező)</label>
+                    <input 
+                      type="email" 
+                      value={invoiceEmail}
+                      onChange={(e) => setInvoiceEmail(e.target.value)}
+                      placeholder="Pl. penzugy@szolgaltato.hu"
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-tight">
+                    Ez a szkript megkeresi a legújabb e-mailt ettől a feladótól, aminek a tárgya "számla", 
+                    és kiolvassa a csatolt PDF tartalmát.
+                  </p>
                 </div>
               ) : (
                 <textarea
