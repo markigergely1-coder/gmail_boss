@@ -1,4 +1,4 @@
-from firebase_admin import initialize_app, firestore
+from firebase_admin import initialize_app, firestore, credentials
 from firebase_functions import scheduler_fn, https_fn
 from google.cloud.firestore_v1.base_query import FieldFilter
 from datetime import datetime, timezone
@@ -7,9 +7,24 @@ import PyPDF2
 import io
 import base64
 import re
+import os
 
 # Initialize once globally
 initialize_app()
+
+# Initialize secondary app for external DB
+target_db = None
+try:
+    key_path = os.path.join(os.path.dirname(__file__), 'target_db_key.json')
+    if os.path.exists(key_path):
+        cred = credentials.Certificate(key_path)
+        target_app = initialize_app(cred, name='target_db')
+        target_db = firestore.client(app=target_app)
+        print("Successfully connected to target_db")
+    else:
+        print(f"Warning: {key_path} not found. Target DB sync will fail.")
+except Exception as e:
+    print(f"Warning: Could not initialize target_db: {e}")
 
 from gmail_auth import get_gmail_service
 
@@ -69,107 +84,160 @@ def handle_test_script(service, parameters):
 
 def handle_invoice_parser(service, parameters):
     """
-    Searches for 'számla' from a target email, downloads the PDF attachment,
-    and parses it for the Invoice Amount, Date, and ID.
+    Searches for 'számla' from a target email, downloads the PDF attachments,
+    parses them, and syncs missing ones to the target database.
     """
     target_email = parameters.get('email', '').strip()
     if not target_email:
         return "Kérlek, add meg a feladó e-mail címét a kereséshez!"
         
+    if target_db is None:
+        return "Hiba: A target_db nincs inicializálva! (Hiányzik a target_db_key.json?)"
+        
     query_string = f"from:{target_email} subject:számla has:attachment filename:pdf"
     
     try:
-        # Search for the latest email with a PDF attachment
-        results = service.users().messages().list(userId='me', q=query_string, maxResults=1).execute()
+        # Search for the latest 10 emails
+        results = service.users().messages().list(userId='me', q=query_string, maxResults=10).execute()
         messages = results.get('messages', [])
         
         if not messages:
             return f"Nem található számla (PDF csatolmány) ettől a feladótól:\n'{target_email}'"
             
-        msg_id = messages[0]['id']
-        msg = service.users().messages().get(userId='me', id=msg_id).execute()
+        processed_count = 0
+        added_count = 0
+        skipped_count = 0
         
-        # Find PDF attachment
-        pdf_part = None
-        
-        # The payload might be nested in 'parts'
-        parts = msg.get('payload', {}).get('parts', [])
-        for part in parts:
-            if part.get('filename', '').lower().endswith('.pdf'):
-                pdf_part = part
-                break
+        for msg_ref in messages:
+            msg_id = msg_ref['id']
+            msg = service.users().messages().get(userId='me', id=msg_id).execute()
+            
+            # Find PDF attachment
+            pdf_part = None
+            
+            parts = msg.get('payload', {}).get('parts', [])
+            for part in parts:
+                if part.get('filename', '').lower().endswith('.pdf'):
+                    pdf_part = part
+                    break
+                    
+            if not pdf_part:
+                def find_pdf_recursive(parts_list):
+                    for p in parts_list:
+                        if p.get('filename', '').lower().endswith('.pdf'):
+                            return p
+                        if 'parts' in p:
+                            found = find_pdf_recursive(p['parts'])
+                            if found:
+                                return found
+                    return None
+                pdf_part = find_pdf_recursive(parts)
                 
-        if not pdf_part:
-            # Sometimes parts are nested inside 'multipart/related' or 'multipart/mixed'
-            def find_pdf_recursive(parts_list):
-                for p in parts_list:
-                    if p.get('filename', '').lower().endswith('.pdf'):
-                        return p
-                    if 'parts' in p:
-                        found = find_pdf_recursive(p['parts'])
-                        if found:
-                            return found
-                return None
-            pdf_part = find_pdf_recursive(parts)
-            
-        if not pdf_part:
-            return "Az e-mailben nem található PDF csatolmány."
-            
-        attachment_id = pdf_part['body'].get('attachmentId')
-        if not attachment_id:
-            return "Nem sikerült azonosítani a PDF csatolmányt."
-            
-        # Download attachment
-        attachment = service.users().messages().attachments().get(
-            userId='me', messageId=msg_id, id=attachment_id
-        ).execute()
-        
-        file_data = base64.urlsafe_b64decode(attachment['data'])
-        
-        # Parse PDF
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_data))
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() + "\n"
-            
-        # Extract Amount using JS-ported regex
-        amount = None
-        amount_regex = re.search(r"(Végösszeg|Fizetendő|Összesen)\s*:?\s*([\d\s\.]+)\s*(Ft|HUF)", text, re.IGNORECASE)
-        if amount_regex:
-            amount_str = re.sub(r"[\s\.\xa0]", "", amount_regex.group(2))
-            try:
-                amount = int(amount_str)
-            except:
-                pass
+            if not pdf_part:
+                continue # Skip email if no PDF found
                 
-        if amount is None:
-            # Fallback regex
-            alt_regexes = re.finditer(r"(?<!\d)([\d\s\.]+)\s*(Ft|HUF)", text, re.IGNORECASE)
-            last_match = None
-            for match in alt_regexes:
-                last_match = match
-            if last_match:
-                amount_str = re.sub(r"[\s\.\xa0]", "", last_match.group(1))
+            attachment_id = pdf_part['body'].get('attachmentId')
+            pdf_filename = pdf_part.get('filename', 'Unknown.pdf')
+            
+            if not attachment_id:
+                continue
+                
+            processed_count += 1
+            
+            # Download attachment
+            attachment = service.users().messages().attachments().get(
+                userId='me', messageId=msg_id, id=attachment_id
+            ).execute()
+            
+            file_data = base64.urlsafe_b64decode(attachment['data'])
+            
+            # Parse PDF
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_data))
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+                
+            # Extract Amount
+            amount = None
+            amount_regex = re.search(r"(Végösszeg|Fizetendő|Összesen)\s*:?\s*([\d\s\.]+)\s*(Ft|HUF)", text, re.IGNORECASE)
+            if amount_regex:
+                amount_str = re.sub(r"[\s\.\xa0]", "", amount_regex.group(2))
                 try:
                     amount = int(amount_str)
                 except:
                     pass
                     
-        # Basic extractions for Date and ID (Fallback simple logic)
-        date_match = re.search(r"(20\d{2}[\.\-][01]\d[\.\-][0-3]\d)", text)
-        invoice_date = date_match.group(1) if date_match else "Nem található dátum"
-        
-        id_match = re.search(r"(Számlaszám|Sorszám|Bizonylatszám)\s*:?\s*([A-Z0-9\-\/]+)", text, re.IGNORECASE)
-        invoice_id = id_match.group(2) if id_match else "Nem található azonosító"
-        
-        amount_display = f"{amount} Ft" if amount else "Nem található összeg"
-        
+            if amount is None:
+                alt_regexes = re.finditer(r"(?<!\d)([\d\s\.]+)\s*(Ft|HUF)", text, re.IGNORECASE)
+                last_match = None
+                for match in alt_regexes:
+                    last_match = match
+                if last_match:
+                    amount_str = re.sub(r"[\s\.\xa0]", "", last_match.group(1))
+                    try:
+                        amount = int(amount_str)
+                    except:
+                        pass
+                        
+            # Extract Date
+            date_match = re.search(r"(20\d{2}[\.\-][01]\d[\.\-][0-3]\d)", text)
+            invoice_date = date_match.group(1) if date_match else None
+            
+            if not invoice_date or not amount:
+                print(f"Skipping {pdf_filename}: Missing date or amount")
+                continue
+                
+            # Normalize date formatting to YYYY-MM-DD
+            invoice_date_norm = invoice_date.replace('.', '-').rstrip('-')
+            
+            # Calculate target_month and target_year (invoice month - 1)
+            try:
+                date_obj = datetime.strptime(invoice_date_norm.replace('.', '-'), "%Y-%m-%d")
+                inv_month = date_obj.month
+                inv_year = date_obj.year
+                
+                if inv_month == 1:
+                    target_month = 12
+                    target_year = inv_year - 1
+                else:
+                    target_month = inv_month - 1
+                    target_year = inv_year
+            except Exception as e:
+                print(f"Error parsing date {invoice_date_norm}: {e}")
+                continue
+
+            # Check if invoice already exists in target_db
+            invoices_ref = target_db.collection('invoices')
+            query = invoices_ref.where(filter=FieldFilter('filename', '==', pdf_filename)) \
+                                .where(filter=FieldFilter('target_month', '==', target_month)) \
+                                .where(filter=FieldFilter('target_year', '==', target_year)).limit(1)
+            
+            existing_docs = list(query.stream())
+            
+            if len(existing_docs) > 0:
+                skipped_count += 1
+            else:
+                # Add to DB
+                new_invoice = {
+                    'amount': amount,
+                    'filename': pdf_filename,
+                    'inv_date': invoice_date_norm,
+                    'target_month': target_month,
+                    'target_year': target_year
+                }
+                invoices_ref.add(new_invoice)
+                added_count += 1
+                print(f"Added new invoice: {new_invoice}")
+
         output = (
-            f"📄 PDF Számla Feldolgozva!\n\n"
-            f"💰 Összeg: {amount_display}\n"
-            f"📅 Dátum: {invoice_date}\n"
-            f"🧾 Azonosító: {invoice_id}"
+            f"📊 Számla Szinkronizáció Kész!\n\n"
+            f"Feldolgozott e-mailek: {processed_count}\n"
+            f"Új számla hozzáadva: {added_count}\n"
+            f"Már létező (kihagyva): {skipped_count}\n"
         )
+        if added_count > 0:
+            output += f"\nSikeresen szinkronizálva a(z) {target_db.project} adatbázisba!"
+            
         return output
         
     except Exception as e:
