@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from './firebase';
-import { ScriptConfig } from './types';
+import type { ScriptConfig } from './types';
 import { ScriptCard } from './components/ScriptCard';
 import { Inbox, Settings, Activity } from 'lucide-react';
 import { motion } from 'framer-motion';

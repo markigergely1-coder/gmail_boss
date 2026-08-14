@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { ScriptConfig, ScriptStatus } from '../types';
+import { useState } from 'react';
+import type { ScriptConfig, ScriptStatus } from '../types';
 import { db, functions } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { motion } from 'framer-motion';
-import { Play, Pause, RefreshCw, Settings, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Play, RefreshCw, Settings, AlertCircle, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
