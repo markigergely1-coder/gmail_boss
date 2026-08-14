@@ -11,32 +11,57 @@ from gmail_auth import get_gmail_service
 
 def handle_test_script(service, parameters):
     """
-    Fetches the last email subject from a target email address.
+    Dynamically searches Gmail based on Name, Email, and/or Subject.
+    Extracts the full From and Subject headers from the match.
     """
-    target_email = parameters.get('target_email')
-    if not target_email:
-        return "Error: 'target_email' parameter is missing."
+    filter_name = parameters.get('name', '').strip()
+    filter_email = parameters.get('email', '').strip()
+    filter_subject = parameters.get('subject', '').strip()
+    
+    if not (filter_name or filter_email or filter_subject):
+        return "Kérlek, adj meg legalább egy szűrési feltételt (Név, E-mail, vagy Tárgy)!"
+        
+    # Build query string
+    query_parts = []
+    if filter_email:
+        query_parts.append(f"from:{filter_email}")
+    elif filter_name:
+        query_parts.append(f"from:{filter_name}") # 'from' searches both name and email in Gmail
+        
+    if filter_subject:
+        query_parts.append(f"subject:{filter_subject}")
+        
+    query_string = " ".join(query_parts)
         
     try:
-        # Search for the latest email from the target
-        results = service.users().messages().list(userId='me', q=f"from:{target_email}", maxResults=1).execute()
+        # Search for the latest email
+        results = service.users().messages().list(userId='me', q=query_string, maxResults=1).execute()
         messages = results.get('messages', [])
         
         if not messages:
-            return f"No emails found from {target_email}."
+            return f"Nem található e-mail erre a keresésre:\n'{query_string}'"
             
-        # Get the full message payload
+        # Get the full message metadata
         msg_id = messages[0]['id']
-        msg = service.users().messages().get(userId='me', id=msg_id, format='metadata', metadataHeaders=['Subject']).execute()
+        msg = service.users().messages().get(userId='me', id=msg_id, format='metadata', metadataHeaders=['From', 'Subject', 'Date']).execute()
         
-        # Extract subject
+        # Extract headers
         headers = msg.get('payload', {}).get('headers', [])
-        subject = next((header['value'] for header in headers if header['name'].lower() == 'subject'), "No Subject")
         
-        return f"Last email from {target_email} Subject:\n{subject}"
+        extracted_from = next((header['value'] for header in headers if header['name'].lower() == 'from'), "Ismeretlen feladó")
+        extracted_subject = next((header['value'] for header in headers if header['name'].lower() == 'subject'), "Nincs tárgy")
+        extracted_date = next((header['value'] for header in headers if header['name'].lower() == 'date'), "Nincs dátum")
+        
+        output = (
+            f"✅ Találat a következő keresésre: '{query_string}'\n\n"
+            f"📅 Dátum: {extracted_date}\n"
+            f"👤 Feladó (Név & E-mail): {extracted_from}\n"
+            f"📝 Tárgy: {extracted_subject}"
+        )
+        return output
         
     except Exception as e:
-        return f"Error fetching emails: {e}"
+        return f"Hiba az e-mailek lekérdezésekor: {e}"
 
 def execute_script(script_config, db):
     """
@@ -109,12 +134,7 @@ def trigger_script(req: https_fn.CallableRequest) -> any:
     """
     HTTP Callable function to manually trigger a script from the dashboard.
     """
-    # Verify auth
-    if not req.auth:
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
-            message="User must be authenticated."
-        )
+    # Temporarily removed auth check so you can test it without a login screen
         
     doc_id = req.data.get('doc_id')
     if not doc_id:

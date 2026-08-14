@@ -4,7 +4,7 @@ import { db, functions } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, RefreshCw, Settings, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Save } from 'lucide-react';
+import { Play, RefreshCw, Settings, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Save, Search } from 'lucide-react';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -20,14 +20,25 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
   // Expandable UI state
   const [isExpanded, setIsExpanded] = useState(false);
   
-  // Parameters editor state
+  // JSON Parameters editor state (Fallback)
   const [paramText, setParamText] = useState("");
   const [isSavingParams, setIsSavingParams] = useState(false);
 
-  // Keep local paramText in sync if it changes externally
+  // Email Filter UI State
+  const [filterName, setFilterName] = useState("");
+  const [filterEmail, setFilterEmail] = useState("");
+  const [filterSubject, setFilterSubject] = useState("");
+
+  // Keep local states in sync if they change externally
   useEffect(() => {
     setParamText(JSON.stringify(script.parameters || {}, null, 2));
-  }, [script.parameters]);
+    
+    if (script.script_id === 'test_script') {
+      setFilterName(script.parameters?.name || "");
+      setFilterEmail(script.parameters?.email || "");
+      setFilterSubject(script.parameters?.subject || "");
+    }
+  }, [script.parameters, script.script_id]);
 
   const handleStatusChange = async (newStatus: ScriptStatus) => {
     try {
@@ -51,7 +62,7 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
     try {
       const triggerScript = httpsCallable(functions, 'trigger_script');
       await triggerScript({ doc_id: script.id });
-      setSuccess("Script triggered successfully!");
+      setSuccess("Szkript sikeresen elindítva!");
       
       // Revert status to OFF or AUTO
       const scriptRef = doc(db, 'scripts_config', script.id);
@@ -70,13 +81,24 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
     setError(null);
     setSuccess(null);
     try {
-      const parsedParams = JSON.parse(paramText);
+      let newParams: any = {};
+      
+      if (script.script_id === 'test_script') {
+        newParams = {
+          name: filterName,
+          email: filterEmail,
+          subject: filterSubject
+        };
+      } else {
+        newParams = JSON.parse(paramText);
+      }
+
       const scriptRef = doc(db, 'scripts_config', script.id);
-      await updateDoc(scriptRef, { parameters: parsedParams });
-      setSuccess("Parameters saved!");
+      await updateDoc(scriptRef, { parameters: newParams });
+      setSuccess("Beállítások mentve!");
     } catch (err) {
       console.error("Invalid JSON:", err);
-      setError("Invalid JSON format in parameters.");
+      setError("Érvénytelen formátum a beállításokban.");
     } finally {
       setIsSavingParams(false);
     }
@@ -86,7 +108,7 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
     return twMerge(clsx(inputs));
   };
 
-  const lastRunStr = script.last_run ? new Date(script.last_run.seconds * 1000).toLocaleString() : 'Never';
+  const lastRunStr = script.last_run ? new Date(script.last_run.seconds * 1000).toLocaleString() : 'Soha';
 
   return (
     <motion.div 
@@ -143,13 +165,13 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
       <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
         <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
           <div className="flex items-center text-slate-400 text-sm mb-1">
-            <RefreshCw className="w-4 h-4 mr-2" /> Interval
+            <RefreshCw className="w-4 h-4 mr-2" /> Gyakoriság
           </div>
-          <div className="text-white font-medium">{script.interval_minutes} mins</div>
+          <div className="text-white font-medium">{script.interval_minutes} perc</div>
         </div>
         <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
           <div className="flex items-center text-slate-400 text-sm mb-1">
-            <Settings className="w-4 h-4 mr-2" /> Last Run
+            <Settings className="w-4 h-4 mr-2" /> Utolsó futás
           </div>
           <div className="text-white font-medium text-sm">{lastRunStr}</div>
         </div>
@@ -166,30 +188,69 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
           >
             {/* Parameters Editor */}
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="text-sm font-semibold text-slate-300">Parameters (JSON)</h4>
+              <div className="flex justify-between items-center mb-4">
+                <h4 className="text-sm font-semibold text-slate-300 flex items-center">
+                  <Search className="w-4 h-4 mr-2" /> 
+                  {script.script_id === 'test_script' ? 'Szűrés' : 'Parameters (JSON)'}
+                </h4>
                 <button 
                   onClick={handleSaveParams}
                   disabled={isSavingParams}
-                  className="flex items-center text-xs bg-slate-800 hover:bg-slate-700 text-white px-2 py-1 rounded transition-colors"
+                  className="flex items-center text-xs bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition-colors"
                 >
-                  <Save className="w-3 h-3 mr-1" /> Save
+                  <Save className="w-3 h-3 mr-1.5" /> Mentés
                 </button>
               </div>
-              <textarea
-                value={paramText}
-                onChange={(e) => setParamText(e.target.value)}
-                className="w-full bg-slate-900/80 rounded-xl border border-slate-700 p-4 font-mono text-xs text-brand-400 focus:outline-none focus:border-brand-500 transition-colors h-32 resize-y"
-                placeholder='{"target_email": "example@gmail.com"}'
-                spellCheck={false}
-              />
+
+              {script.script_id === 'test_script' ? (
+                <div className="space-y-3 bg-slate-900/80 rounded-xl border border-slate-800 p-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Név (Opcionális)</label>
+                    <input 
+                      type="text" 
+                      value={filterName}
+                      onChange={(e) => setFilterName(e.target.value)}
+                      placeholder="Pl. Kovács János"
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">E-mail (Opcionális)</label>
+                    <input 
+                      type="email" 
+                      value={filterEmail}
+                      onChange={(e) => setFilterEmail(e.target.value)}
+                      placeholder="Pl. janos@pelda.hu"
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Tárgy (Opcionális)</label>
+                    <input 
+                      type="text" 
+                      value={filterSubject}
+                      onChange={(e) => setFilterSubject(e.target.value)}
+                      placeholder="Pl. Számla"
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  value={paramText}
+                  onChange={(e) => setParamText(e.target.value)}
+                  className="w-full bg-slate-900/80 rounded-xl border border-slate-700 p-4 font-mono text-xs text-brand-400 focus:outline-none focus:border-brand-500 transition-colors h-32 resize-y"
+                  placeholder='{"key": "value"}'
+                  spellCheck={false}
+                />
+              )}
             </div>
 
             {/* Output Log */}
             <div>
-              <h4 className="text-sm font-semibold text-slate-300 mb-2">Last Output</h4>
-              <div className="bg-slate-950/80 rounded-xl border border-slate-800 p-4 font-mono text-xs text-emerald-400 min-h-16 whitespace-pre-wrap">
-                {script.last_output || "No output yet."}
+              <h4 className="text-sm font-semibold text-slate-300 mb-2">Utolsó Eredmény</h4>
+              <div className="bg-slate-950/80 rounded-xl border border-slate-800 p-4 font-mono text-xs text-emerald-400 min-h-24 whitespace-pre-wrap">
+                {script.last_output || "Még nincs eredmény."}
               </div>
             </div>
           </motion.div>
@@ -224,12 +285,12 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
         {isTriggering ? (
           <>
             <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-            Executing...
+            Feldolgozás...
           </>
         ) : (
           <>
             <Play className="w-5 h-5 mr-2 fill-current" />
-            Run Now
+            Keresés Indítása
           </>
         )}
       </button>
