@@ -1,122 +1,91 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useEffect, useState } from 'react';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from './firebase';
+import { ScriptConfig } from './types';
+import { ScriptCard } from './components/ScriptCard';
+import { Inbox, Settings, Activity } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [scripts, setScripts] = useState<ScriptConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, 'scripts_config'));
+    
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        const fetchedScripts: ScriptConfig[] = [];
+        snapshot.forEach((doc) => {
+          fetchedScripts.push({
+            id: doc.id,
+            ...doc.data()
+          } as ScriptConfig);
+        });
+        setScripts(fetchedScripts);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Firestore Error:", err);
+        setError(err.message);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+    <div className="min-h-screen p-6 md:p-12 max-w-7xl mx-auto">
+      {/* Header */}
+      <header className="mb-12">
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center space-x-4 mb-2"
         >
-          Count is {count}
-        </button>
-      </section>
+          <div className="w-12 h-12 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg shadow-brand-500/20">
+            <Inbox className="w-6 h-6 text-white" />
+          </div>
+          <h1 className="text-4xl font-extrabold tracking-tight text-white">Gmail Boss</h1>
+        </motion.div>
+        <motion.p 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="text-slate-400 text-lg ml-16"
+        >
+          Serverless Email Automation Engine
+        </motion.p>
+      </header>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {/* Main Content */}
+      <main>
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <Activity className="w-8 h-8 text-brand-500 animate-pulse" />
+          </div>
+        ) : error ? (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-6 rounded-2xl">
+            Error loading scripts: {error}
+          </div>
+        ) : scripts.length === 0 ? (
+          <div className="bg-panel border border-panel-border p-12 rounded-2xl text-center backdrop-blur-md">
+            <Settings className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-white mb-2">No scripts found</h3>
+            <p className="text-slate-400">Create a document in the scripts_config Firestore collection to get started.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {scripts.map((script) => (
+              <ScriptCard key={script.id} script={script} />
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  );
 }
 
-export default App
+export default App;
