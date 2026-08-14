@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ScriptConfig, ScriptStatus } from '../types';
 import { db, functions } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { motion } from 'framer-motion';
-import { Play, RefreshCw, Settings, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Play, RefreshCw, Settings, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -16,6 +16,18 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
   const [isTriggering, setIsTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  
+  // Expandable UI state
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Parameters editor state
+  const [paramText, setParamText] = useState("");
+  const [isSavingParams, setIsSavingParams] = useState(false);
+
+  // Keep local paramText in sync if it changes externally
+  useEffect(() => {
+    setParamText(JSON.stringify(script.parameters || {}, null, 2));
+  }, [script.parameters]);
 
   const handleStatusChange = async (newStatus: ScriptStatus) => {
     try {
@@ -41,8 +53,7 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
       await triggerScript({ doc_id: script.id });
       setSuccess("Script triggered successfully!");
       
-      // After manual trigger, revert status to OFF or AUTO to prevent infinite looping
-      // Let's set it back to OFF for safety
+      // Revert status to OFF or AUTO
       const scriptRef = doc(db, 'scripts_config', script.id);
       await updateDoc(scriptRef, { status: 'OFF' });
       
@@ -51,6 +62,23 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
       setError(err.message || "Failed to trigger script.");
     } finally {
       setIsTriggering(false);
+    }
+  };
+
+  const handleSaveParams = async () => {
+    setIsSavingParams(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const parsedParams = JSON.parse(paramText);
+      const scriptRef = doc(db, 'scripts_config', script.id);
+      await updateDoc(scriptRef, { parameters: parsedParams });
+      setSuccess("Parameters saved!");
+    } catch (err) {
+      console.error("Invalid JSON:", err);
+      setError("Invalid JSON format in parameters.");
+    } finally {
+      setIsSavingParams(false);
     }
   };
 
@@ -64,19 +92,30 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-panel border border-panel-border backdrop-blur-md rounded-2xl p-6 shadow-xl relative overflow-hidden"
+      className="bg-panel border border-panel-border backdrop-blur-md rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col"
     >
       {/* Decorative gradient blob */}
-      <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-500/20 rounded-full blur-3xl" />
+      <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-500/20 rounded-full blur-3xl pointer-events-none" />
       
-      <div className="flex justify-between items-start mb-4 relative z-10">
+      {/* Header Area (Clickable to expand) */}
+      <div 
+        className="flex justify-between items-start mb-4 relative z-10 cursor-pointer group"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
         <div>
-          <h3 className="text-xl font-bold text-white tracking-tight">{script.name}</h3>
+          <div className="flex items-center">
+            <h3 className="text-xl font-bold text-white tracking-tight group-hover:text-brand-400 transition-colors">{script.name}</h3>
+            {isExpanded ? (
+              <ChevronUp className="w-5 h-5 ml-2 text-slate-500 group-hover:text-brand-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 ml-2 text-slate-500 group-hover:text-brand-400" />
+            )}
+          </div>
           <p className="text-sm text-slate-400 font-mono mt-1">{script.script_id}</p>
         </div>
         
         {/* Status indicator */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Status:</span>
           <div className="flex bg-slate-800/80 rounded-lg p-1 border border-slate-700">
             <button
@@ -116,23 +155,56 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
         </div>
       </div>
 
-      {/* Parameters */}
-      <div className="mb-6 relative z-10">
-        <h4 className="text-sm font-semibold text-slate-300 mb-2">Parameters</h4>
-        <div className="bg-slate-900/50 rounded-xl border border-slate-800 p-4 font-mono text-xs text-brand-500 overflow-x-auto">
-          {JSON.stringify(script.parameters, null, 2)}
-        </div>
-      </div>
+      {/* Expandable Content Area */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden relative z-10 mb-6 flex flex-col space-y-6"
+          >
+            {/* Parameters Editor */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-sm font-semibold text-slate-300">Parameters (JSON)</h4>
+                <button 
+                  onClick={handleSaveParams}
+                  disabled={isSavingParams}
+                  className="flex items-center text-xs bg-slate-800 hover:bg-slate-700 text-white px-2 py-1 rounded transition-colors"
+                >
+                  <Save className="w-3 h-3 mr-1" /> Save
+                </button>
+              </div>
+              <textarea
+                value={paramText}
+                onChange={(e) => setParamText(e.target.value)}
+                className="w-full bg-slate-900/80 rounded-xl border border-slate-700 p-4 font-mono text-xs text-brand-400 focus:outline-none focus:border-brand-500 transition-colors h-32 resize-y"
+                placeholder='{"target_email": "example@gmail.com"}'
+                spellCheck={false}
+              />
+            </div>
+
+            {/* Output Log */}
+            <div>
+              <h4 className="text-sm font-semibold text-slate-300 mb-2">Last Output</h4>
+              <div className="bg-slate-950/80 rounded-xl border border-slate-800 p-4 font-mono text-xs text-emerald-400 min-h-16 whitespace-pre-wrap">
+                {script.last_output || "No output yet."}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Messages */}
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-start">
+        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-start relative z-10">
           <AlertCircle className="w-4 h-4 mr-2 mt-0.5 shrink-0" />
           {error}
         </div>
       )}
       {success && (
-        <div className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-start">
+        <div className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-start relative z-10">
           <CheckCircle2 className="w-4 h-4 mr-2 mt-0.5 shrink-0" />
           {success}
         </div>
@@ -143,7 +215,7 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
         onClick={() => handleStatusChange('ON')}
         disabled={isTriggering}
         className={cn(
-          "w-full py-3 rounded-xl font-medium flex items-center justify-center transition-all relative z-10",
+          "w-full py-3 rounded-xl font-medium flex items-center justify-center transition-all relative z-10 mt-auto",
           isTriggering 
             ? "bg-slate-800 text-slate-400 cursor-not-allowed"
             : "bg-gradient-to-r from-brand-600 to-brand-500 text-white hover:opacity-90 shadow-lg shadow-brand-500/25"

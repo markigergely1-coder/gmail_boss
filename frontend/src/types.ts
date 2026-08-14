@@ -7,5 +7,6 @@ export interface ScriptConfig {
   status: ScriptStatus;
   interval_minutes: number;
   last_run: any; // Firestore Timestamp
+  last_output?: string;
   parameters: Record<string, any>;
 }

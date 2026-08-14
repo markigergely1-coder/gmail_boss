@@ -9,30 +9,67 @@ initialize_app()
 
 from gmail_auth import get_gmail_service
 
+def handle_test_script(service, parameters):
+    """
+    Fetches the last email subject from a target email address.
+    """
+    target_email = parameters.get('target_email')
+    if not target_email:
+        return "Error: 'target_email' parameter is missing."
+        
+    try:
+        # Search for the latest email from the target
+        results = service.users().messages().list(userId='me', q=f"from:{target_email}", maxResults=1).execute()
+        messages = results.get('messages', [])
+        
+        if not messages:
+            return f"No emails found from {target_email}."
+            
+        # Get the full message payload
+        msg_id = messages[0]['id']
+        msg = service.users().messages().get(userId='me', id=msg_id, format='metadata', metadataHeaders=['Subject']).execute()
+        
+        # Extract subject
+        headers = msg.get('payload', {}).get('headers', [])
+        subject = next((header['value'] for header in headers if header['name'].lower() == 'subject'), "No Subject")
+        
+        return f"Last email from {target_email} Subject:\n{subject}"
+        
+    except Exception as e:
+        return f"Error fetching emails: {e}"
+
 def execute_script(script_config, db):
     """
-    Executes the actual Gmail logic based on the script ID and updates last_run.
+    Executes the actual Gmail logic based on the script ID and updates last_run and last_output.
     """
     script_id = script_config.get('script_id')
     parameters = script_config.get('parameters', {})
     
     print(f"Executing script {script_id} with params {parameters}...")
     
+    output_msg = ""
+    
     # Try to get Gmail service to ensure auth works
     try:
         service = get_gmail_service()
-        # For now, let's just fetch the profile to prove it works.
-        profile = service.users().getProfile(userId='me').execute()
-        print(f"[{script_id}] Authenticated as: {profile.get('emailAddress')}")
+        
+        # Router
+        if script_id == 'test_script':
+            output_msg = handle_test_script(service, parameters)
+        else:
+            output_msg = f"Unknown script_id: {script_id}"
+            
+        print(f"[{script_id}] Output: {output_msg}")
         
     except Exception as e:
-        print(f"Failed to authenticate or run Gmail API for {script_id}: {e}")
-        return False
+        output_msg = f"Failed to authenticate or run Gmail API for {script_id}: {e}"
+        print(output_msg)
 
-    # Update last_run
+    # Update last_run and last_output
     doc_ref = db.collection('scripts_config').document(script_config.get('doc_id'))
     doc_ref.update({
-        'last_run': firestore.SERVER_TIMESTAMP
+        'last_run': firestore.SERVER_TIMESTAMP,
+        'last_output': output_msg
     })
     
     print(f"Successfully executed script {script_id}")
