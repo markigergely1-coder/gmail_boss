@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Save } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import type { ScheduleType } from '../types';
 
 interface CreateScriptModalProps {
   isOpen: boolean;
@@ -12,7 +13,16 @@ interface CreateScriptModalProps {
 export const CreateScriptModal: React.FC<CreateScriptModalProps> = ({ isOpen, onClose }) => {
   const [name, setName] = useState('');
   const [scriptId, setScriptId] = useState('test_script');
-  const [interval, setInterval] = useState('60');
+  
+  // Advanced Scheduling State
+  const [scheduleType, setScheduleType] = useState<ScheduleType>('minutes');
+  const [scheduleValue, setScheduleValue] = useState('60');
+  
+  // Format current date/time to local datetime-local format
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  const [startTime, setStartTime] = useState(now.toISOString().slice(0, 16));
+  
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,14 +40,22 @@ export const CreateScriptModal: React.FC<CreateScriptModalProps> = ({ isOpen, on
         name: name.trim(),
         script_id: scriptId,
         status: 'OFF',
-        interval_minutes: parseInt(interval, 10) || 60,
+        schedule_type: scheduleType,
+        schedule_value: parseInt(scheduleValue, 10) || 1,
+        start_time: new Date(startTime).toISOString(),
         parameters: {}
       });
       
       // Reset form and close
       setName('');
       setScriptId('test_script');
-      setInterval('60');
+      setScheduleType('minutes');
+      setScheduleValue('60');
+      
+      const newTime = new Date();
+      newTime.setMinutes(newTime.getMinutes() - newTime.getTimezoneOffset());
+      setStartTime(newTime.toISOString().slice(0, 16));
+      
       onClose();
       
     } catch (err: any) {
@@ -110,14 +128,38 @@ export const CreateScriptModal: React.FC<CreateScriptModalProps> = ({ isOpen, on
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Gyakoriság (percben)</label>
-                    <input 
-                      type="number"
-                      value={interval}
-                      onChange={(e) => setInterval(e.target.value)}
-                      min="1"
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Kezdési Időpont</label>
+                    <input
+                      type="datetime-local"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-brand-500 transition-colors"
                     />
+                    <p className="text-xs text-slate-500 mt-1.5">
+                      A szkript legkorábban ekkor fog először lefutni.
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Gyakoriság</label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="number"
+                        min="1"
+                        value={scheduleValue}
+                        onChange={(e) => setScheduleValue(e.target.value)}
+                        className="w-24 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-brand-500 transition-colors"
+                      />
+                      <select
+                        value={scheduleType}
+                        onChange={(e) => setScheduleType(e.target.value as ScheduleType)}
+                        className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-brand-500 transition-colors appearance-none cursor-pointer"
+                      >
+                        <option value="minutes">Perc</option>
+                        <option value="hours">Óra</option>
+                        <option value="days">Nap</option>
+                      </select>
+                    </div>
                   </div>
 
                   {error && (

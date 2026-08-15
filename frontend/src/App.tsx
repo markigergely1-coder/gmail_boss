@@ -4,7 +4,8 @@ import { db } from './firebase';
 import type { ScriptConfig } from './types';
 import { ScriptCard } from './components/ScriptCard';
 import { CreateScriptModal } from './components/CreateScriptModal';
-import { Inbox, Settings, Activity, Plus } from 'lucide-react';
+import { InvoiceMerger } from './components/InvoiceMerger';
+import { Inbox, Settings, Activity, Plus, FileText, Code2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'scripts' | 'merger'>('scripts');
 
   useEffect(() => {
     const q = query(collection(db, 'scripts_config'));
@@ -75,9 +77,37 @@ function App() {
         </motion.button>
       </header>
 
+      {/* Tabs */}
+      <div className="flex space-x-4 mb-8">
+        <button
+          onClick={() => setActiveTab('scripts')}
+          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all ${
+            activeTab === 'scripts' 
+              ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+          }`}
+        >
+          <Code2 className="w-5 h-5 mr-2" />
+          Automatizációk
+        </button>
+        <button
+          onClick={() => setActiveTab('merger')}
+          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all ${
+            activeTab === 'merger' 
+              ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+          }`}
+        >
+          <FileText className="w-5 h-5 mr-2" />
+          Számla Egyesítő
+        </button>
+      </div>
+
       {/* Main Content */}
       <main>
-        {loading ? (
+        {activeTab === 'merger' ? (
+          <InvoiceMerger />
+        ) : loading ? (
           <div className="flex items-center justify-center h-64">
             <Activity className="w-8 h-8 text-brand-500 animate-pulse" />
           </div>

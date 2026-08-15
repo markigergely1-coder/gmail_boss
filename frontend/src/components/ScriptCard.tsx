@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
-import type { ScriptConfig, ScriptStatus } from '../types';
+import { useState } from 'react';
+import type { ScriptConfig, ScriptStatus, ScheduleType } from '../types';
 import { db, functions } from '../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, RefreshCw, Settings, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Save, Search } from 'lucide-react';
+import { Play, RefreshCw, Settings, AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Save, Search, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { twMerge } from 'tailwind-merge';
+
+const cn = (...args: (string | boolean | undefined | null)[]) => twMerge(clsx(args));
 
 interface ScriptCardProps {
   script: ScriptConfig;
@@ -14,12 +16,13 @@ interface ScriptCardProps {
 
 export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
   const [isTriggering, setIsTriggering] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  
+
   // Expandable UI state
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   // JSON Parameters editor state (Fallback)
   const [paramText, setParamText] = useState("");
   const [isSavingParams, setIsSavingParams] = useState(false);
@@ -27,112 +30,165 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
   // Email Filter UI State
   const [filterName, setFilterName] = useState("");
   const [filterEmail, setFilterEmail] = useState("");
-  const [filterSubject, setFilterSubject] = useState("");
 
   // Invoice Parser UI State
-  const [invoiceEmail, setInvoiceEmail] = useState("");
-  const [invoiceRetroactive, setInvoiceRetroactive] = useState(false);
+  const [invoiceEmail, setInvoiceEmail] = useState(
+    script.parameters?.sender_email || ""
+  );
+  const [invoiceRetroactive, setInvoiceRetroactive] = useState<boolean>(
+    script.parameters?.retroactive || false
+  );
 
-  // Keep local states in sync if they change externally
-  useEffect(() => {
-    setParamText(JSON.stringify(script.parameters || {}, null, 2));
-    
-    if (script.script_id === 'test_script') {
-      setFilterName(script.parameters?.name || "");
-      setFilterEmail(script.parameters?.email || "");
-      setFilterSubject(script.parameters?.subject || "");
-    } else if (script.script_id === 'invoice_parser') {
-      setInvoiceEmail(script.parameters?.email || "");
-      setInvoiceRetroactive(script.parameters?.retroactive || false);
+  // Advanced Scheduling UI State
+  const [scheduleType, setScheduleType] = useState<ScheduleType>(
+    script.schedule_type || 'minutes'
+  );
+  const [scheduleValue, setScheduleValue] = useState<string>(
+    String(script.schedule_value || 60)
+  );
+  const [startTime, setStartTime] = useState<string>(() => {
+    if (script.start_time) {
+      const d = new Date(script.start_time);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
     }
-  }, [script.parameters, script.script_id]);
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+
+  const scriptRef = doc(db, 'scripts_config', script.id);
 
   const handleStatusChange = async (newStatus: ScriptStatus) => {
-    try {
-      const scriptRef = doc(db, 'scripts_config', script.id);
-      await updateDoc(scriptRef, { status: newStatus });
-      
-      // If user sets to ON, automatically trigger the function
-      if (newStatus === 'ON') {
-        handleTriggerScript();
+    if (newStatus === 'ON') {
+      // "Run Now": auto-save parameters first, then trigger
+      setIsTriggering(true);
+      setError(null);
+      setSuccess(null);
+      try {
+        // 1. Save current params to Firestore before running
+        if (script.script_id === 'test_script') {
+          await updateDoc(scriptRef, {
+            parameters: { name: filterName, email: filterEmail },
+          });
+        } else if (script.script_id === 'invoice_parser') {
+          await updateDoc(scriptRef, {
+            parameters: {
+              sender_email: invoiceEmail,
+              retroactive: invoiceRetroactive,
+            },
+          });
+        }
+
+        // 2. Trigger the script via Cloud Function
+        const triggerScript = httpsCallable(functions, 'trigger_script');
+        const result = await triggerScript({ doc_id: script.id });
+        console.log("Trigger result:", result.data);
+        setSuccess("Szkript sikeresen elindult!");
+        setTimeout(() => setSuccess(null), 5000);
+      } catch (err: any) {
+        console.error("Error triggering script:", err);
+        setError(err.message || "Hiba a szkript indításakor.");
+      } finally {
+        setIsTriggering(false);
       }
-    } catch (err) {
-      console.error("Error updating status:", err);
-      setError("Failed to update status.");
+    } else {
+      // Toggle AUTO / OFF
+      try {
+        await updateDoc(scriptRef, { status: newStatus });
+      } catch (err: any) {
+        setError(err.message || "Hiba a státusz frissítésekor.");
+      }
     }
   };
 
-  const handleTriggerScript = async () => {
-    setIsTriggering(true);
+  const handleDeleteScript = async () => {
+    if (!window.confirm(`Biztosan törölni szeretnéd a "${script.name}" szkriptet? Ez a művelet nem visszafordítható.`)) {
+      return;
+    }
+    setIsDeleting(true);
     setError(null);
-    setSuccess(null);
     try {
-      const triggerScript = httpsCallable(functions, 'trigger_script');
-      await triggerScript({ doc_id: script.id });
-      setSuccess("Szkript sikeresen elindítva!");
-      
-      // Revert status to OFF or AUTO
-      const scriptRef = doc(db, 'scripts_config', script.id);
-      await updateDoc(scriptRef, { status: 'OFF' });
-      
+      await deleteDoc(scriptRef);
+      // The card will disappear automatically via onSnapshot
     } catch (err: any) {
-      console.error("Error triggering script:", err);
-      setError(err.message || "Failed to trigger script.");
+      console.error("Error deleting script:", err);
+      setError(err.message || "Hiba a szkript törlésekor.");
+      setIsDeleting(false);
+    }
+  };
+
+  const handleSaveSchedule = async () => {
+    setIsSavingSchedule(true);
+    setError(null);
+    try {
+      await updateDoc(scriptRef, {
+        schedule_type: scheduleType,
+        schedule_value: parseInt(scheduleValue, 10) || 1,
+        start_time: new Date(startTime).toISOString(),
+      });
+      setSuccess("Ütemezés mentve!");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message || "Hiba a mentés során.");
     } finally {
-      setIsTriggering(false);
+      setIsSavingSchedule(false);
     }
   };
 
   const handleSaveParams = async () => {
     setIsSavingParams(true);
     setError(null);
-    setSuccess(null);
     try {
-      let newParams: any = {};
-      
       if (script.script_id === 'test_script') {
-        newParams = {
-          name: filterName,
-          email: filterEmail,
-          subject: filterSubject
-        };
+        await updateDoc(scriptRef, {
+          parameters: { name: filterName, email: filterEmail },
+        });
       } else if (script.script_id === 'invoice_parser') {
-        newParams = {
-          email: invoiceEmail,
-          retroactive: invoiceRetroactive
-        };
+        await updateDoc(scriptRef, {
+          parameters: {
+            sender_email: invoiceEmail,
+            retroactive: invoiceRetroactive,
+          },
+        });
       } else {
-        newParams = JSON.parse(paramText);
+        const parsed = JSON.parse(paramText);
+        await updateDoc(scriptRef, { parameters: parsed });
       }
-
-      const scriptRef = doc(db, 'scripts_config', script.id);
-      await updateDoc(scriptRef, { parameters: newParams });
       setSuccess("Beállítások mentve!");
-    } catch (err) {
-      console.error("Invalid JSON:", err);
-      setError("Érvénytelen formátum a beállításokban.");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message || "Hiba a mentés során. Ellenőrizd a JSON formátumot.");
     } finally {
       setIsSavingParams(false);
     }
   };
 
-  const cn = (...inputs: (string | undefined | null | false)[]) => {
-    return twMerge(clsx(inputs));
+  const formatSchedule = () => {
+    const val = script.schedule_value || 60;
+    const type = script.schedule_type || 'minutes';
+    const labels: Record<ScheduleType, string> = { minutes: 'percenként', hours: 'óránként', days: 'naponként' };
+    return `Minden ${val} ${labels[type]}`;
   };
 
-  const lastRunStr = script.last_run ? new Date(script.last_run.seconds * 1000).toLocaleString() : 'Soha';
+  const getStatusColor = (status: ScriptStatus) => {
+    if (status === 'AUTO') return 'text-emerald-400';
+    if (status === 'OFF') return 'text-slate-500';
+    return 'text-brand-400';
+  };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="bg-panel border border-panel-border backdrop-blur-md rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col"
     >
       {/* Decorative gradient blob */}
       <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-500/20 rounded-full blur-3xl pointer-events-none" />
-      
+
       {/* Header Area (Clickable to expand) */}
-      <div 
+      <div
         className="flex justify-between items-start mb-4 relative z-10 cursor-pointer group"
         onClick={() => setIsExpanded(!isExpanded)}
       >
@@ -147,79 +203,171 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
           </div>
           <p className="text-sm text-slate-400 font-mono mt-1">{script.script_id}</p>
         </div>
-        
-        {/* Status indicator */}
-        <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Status:</span>
-          <div className="flex bg-slate-800/80 rounded-lg p-1 border border-slate-700">
-            <button
-              onClick={() => handleStatusChange('OFF')}
-              className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                script.status === 'OFF' ? "bg-slate-700 text-white shadow-sm" : "text-slate-400 hover:text-white hover:bg-slate-700/50"
-              )}
-            >
-              OFF
-            </button>
-            <button
-              onClick={() => handleStatusChange('AUTO')}
-              className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-md transition-all",
-                script.status === 'AUTO' ? "bg-brand-600 text-white shadow-sm" : "text-slate-400 hover:text-white hover:bg-slate-700/50"
-              )}
-            >
-              AUTO
-            </button>
-          </div>
+
+        {/* Status & Actions indicator */}
+        <div className="flex items-center space-x-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {/* Status dot */}
+          <span
+            title={`Státusz: ${script.status}`}
+            className={cn(
+              "w-2.5 h-2.5 rounded-full shrink-0",
+              script.status === 'AUTO' ? "bg-emerald-400 shadow-[0_0_6px_2px_rgba(52,211,153,0.5)]" : "bg-slate-600"
+            )}
+          />
+          {/* Run Now Button */}
+          <button
+            onClick={() => handleStatusChange('ON')}
+            disabled={isTriggering || isDeleting}
+            title="Azonnali futtatás"
+            className={cn(
+              "p-2 rounded-lg transition-all shrink-0",
+              isTriggering
+                ? "bg-brand-900/50 text-brand-700 cursor-not-allowed"
+                : "bg-brand-500/20 text-brand-400 hover:bg-brand-500 hover:text-white"
+            )}
+          >
+            {isTriggering ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+          </button>
+          {/* Delete Button */}
+          <button
+            onClick={handleDeleteScript}
+            disabled={isDeleting || isTriggering}
+            title="Szkript törlése"
+            className={cn(
+              "p-2 rounded-lg transition-all shrink-0",
+              isDeleting
+                ? "bg-red-900/50 text-red-700 cursor-not-allowed"
+                : "bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white"
+            )}
+          >
+            {isDeleting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          </button>
         </div>
+
       </div>
 
+      {/* Stats Row */}
       <div className="grid grid-cols-2 gap-4 mb-6 relative z-10">
-        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
-          <div className="flex items-center text-slate-400 text-sm mb-1">
-            <RefreshCw className="w-4 h-4 mr-2" /> Gyakoriság
-          </div>
-          <div className="text-white font-medium">{script.interval_minutes} perc</div>
+        <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+          <p className="text-xs text-slate-500 mb-1">Státusz</p>
+          <p className={cn("text-sm font-bold", getStatusColor(script.status))}>
+            {script.status}
+          </p>
         </div>
-        <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
-          <div className="flex items-center text-slate-400 text-sm mb-1">
-            <Settings className="w-4 h-4 mr-2" /> Utolsó futás
-          </div>
-          <div className="text-white font-medium text-sm">{lastRunStr}</div>
+        <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+          <p className="text-xs text-slate-500 mb-1">Ütemezés</p>
+          <p className="text-sm font-semibold text-white truncate">{formatSchedule()}</p>
         </div>
+        {script.last_run && (
+          <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50 col-span-2">
+            <p className="text-xs text-slate-500 mb-1">Utolsó futtatás</p>
+            <p className="text-sm font-mono text-slate-300">
+              {new Date(script.last_run.seconds * 1000).toLocaleString('hu-HU')}
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* Expandable Content Area */}
+      {/* Expandable Details */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden relative z-10 mb-6 flex flex-col space-y-6"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden space-y-6 relative z-10"
           >
-            {/* Parameters Editor */}
+            {/* Status Toggle */}
             <div>
-              <div className="flex justify-between items-center mb-4">
-                <h4 className="text-sm font-semibold text-slate-300 flex items-center">
-                  <Search className="w-4 h-4 mr-2" /> 
-                  {script.script_id === 'test_script' ? 'Szűrés' : 'Parameters (JSON)'}
-                </h4>
-                <button 
-                  onClick={handleSaveParams}
-                  disabled={isSavingParams}
-                  className="flex items-center text-xs bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition-colors"
+              <h4 className="text-sm font-semibold text-slate-300 mb-3">Szkript Státusza</h4>
+              <div className="flex bg-slate-800/80 rounded-xl p-1 border border-slate-700 w-full">
+                <button
+                  onClick={() => handleStatusChange('OFF')}
+                  className={cn(
+                    "flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all",
+                    script.status === 'OFF'
+                      ? "bg-slate-700 text-white shadow-sm"
+                      : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                  )}
                 >
-                  <Save className="w-3 h-3 mr-1.5" /> Mentés
+                  OFF
+                </button>
+                <button
+                  onClick={() => handleStatusChange('AUTO')}
+                  className={cn(
+                    "flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all",
+                    script.status === 'AUTO'
+                      ? "bg-brand-600 text-white shadow-sm shadow-brand-500/30"
+                      : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                  )}
+                >
+                  AUTO (Ütemezett)
                 </button>
               </div>
+            </div>
 
+            {/* Advanced Scheduling */}
+
+            <div>
+              <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center">
+                <Settings className="w-4 h-4 mr-2 text-brand-500" />
+                Ütemezés Beállítása
+              </h4>
+              <div className="space-y-3 bg-slate-900/80 rounded-xl border border-slate-800 p-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Kezdési Időpont</label>
+                  <input
+                    type="datetime-local"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Ismétlési Intervallum</label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="number"
+                      min="1"
+                      value={scheduleValue}
+                      onChange={(e) => setScheduleValue(e.target.value)}
+                      className="w-24 bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                    />
+                    <select
+                      value={scheduleType}
+                      onChange={(e) => setScheduleType(e.target.value as ScheduleType)}
+                      className="flex-1 bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors appearance-none"
+                    >
+                      <option value="minutes">Perc</option>
+                      <option value="hours">Óra</option>
+                      <option value="days">Nap</option>
+                    </select>
+                  </div>
+                </div>
+                <button
+                  onClick={handleSaveSchedule}
+                  disabled={isSavingSchedule}
+                  className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg flex items-center justify-center transition-colors disabled:opacity-50"
+                >
+                  {isSavingSchedule ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                  Ütemezés Mentése
+                </button>
+              </div>
+            </div>
+
+            {/* Script Parameters */}
+            <div>
+              <h4 className="text-sm font-semibold text-slate-300 mb-3 flex items-center">
+                <Search className="w-4 h-4 mr-2 text-brand-500" />
+                Szkript Beállítások
+              </h4>
               {script.script_id === 'test_script' ? (
                 <div className="space-y-3 bg-slate-900/80 rounded-xl border border-slate-800 p-4">
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Név (Opcionális)</label>
-                    <input 
-                      type="text" 
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Feladó Neve (Szűrő)</label>
+                    <input
+                      type="text"
                       value={filterName}
                       onChange={(e) => setFilterName(e.target.value)}
                       placeholder="Pl. Kovács János"
@@ -227,21 +375,11 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">E-mail (Opcionális)</label>
-                    <input 
-                      type="email" 
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Feladó E-mail Címe (Szűrő)</label>
+                    <input
+                      type="email"
                       value={filterEmail}
                       onChange={(e) => setFilterEmail(e.target.value)}
-                      placeholder="Pl. janos@pelda.hu"
-                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Tárgy (Opcionális)</label>
-                    <input 
-                      type="text" 
-                      value={filterSubject}
-                      onChange={(e) => setFilterSubject(e.target.value)}
                       placeholder="Pl. Számla"
                       className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
                     />
@@ -251,8 +389,8 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
                 <div className="space-y-3 bg-slate-900/80 rounded-xl border border-slate-800 p-4">
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1">Feladó E-mail Címe (Kötelező)</label>
-                    <input 
-                      type="email" 
+                    <input
+                      type="email"
                       value={invoiceEmail}
                       onChange={(e) => setInvoiceEmail(e.target.value)}
                       placeholder="Pl. penzugy@szolgaltato.hu"
@@ -260,7 +398,7 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
                     />
                   </div>
                   <div className="flex items-center space-x-2 pt-2">
-                    <input 
+                    <input
                       type="checkbox"
                       id={`retroactive-${script.id}`}
                       checked={invoiceRetroactive}
@@ -272,8 +410,8 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
                     </label>
                   </div>
                   <p className="text-[10px] text-slate-500 leading-tight">
-                    {invoiceRetroactive 
-                      ? 'Bekapcsolva: Az utolsó 10 "számla" tárgyú levelet nézi végig, hogy bepótolja a hiányzókat.' 
+                    {invoiceRetroactive
+                      ? 'Bekapcsolva: Az utolsó 10 "számla" tárgyú levelet nézi végig, hogy bepótolja a hiányzókat.'
                       : 'Kikapcsolva: Csak a legfrissebb számlát ellenőrzi a leggyorsabb működés érdekében.'}
                   </p>
                 </div>
@@ -286,6 +424,14 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
                   spellCheck={false}
                 />
               )}
+              <button
+                onClick={handleSaveParams}
+                disabled={isSavingParams}
+                className="w-full mt-2 py-2 bg-brand-600/80 hover:bg-brand-600 text-white text-sm font-medium rounded-lg flex items-center justify-center transition-colors disabled:opacity-50"
+              >
+                {isSavingParams ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                Beállítások Mentése
+              </button>
             </div>
 
             {/* Output Log */}
@@ -301,41 +447,17 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
 
       {/* Messages */}
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-start relative z-10">
+        <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-start relative z-10">
           <AlertCircle className="w-4 h-4 mr-2 mt-0.5 shrink-0" />
           {error}
         </div>
       )}
       {success && (
-        <div className="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-start relative z-10">
+        <div className="mt-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-start relative z-10">
           <CheckCircle2 className="w-4 h-4 mr-2 mt-0.5 shrink-0" />
           {success}
         </div>
       )}
-
-      {/* Action Button */}
-      <button
-        onClick={() => handleStatusChange('ON')}
-        disabled={isTriggering}
-        className={cn(
-          "w-full py-3 rounded-xl font-medium flex items-center justify-center transition-all relative z-10 mt-auto",
-          isTriggering 
-            ? "bg-slate-800 text-slate-400 cursor-not-allowed"
-            : "bg-gradient-to-r from-brand-600 to-brand-500 text-white hover:opacity-90 shadow-lg shadow-brand-500/25"
-        )}
-      >
-        {isTriggering ? (
-          <>
-            <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-            Feldolgozás...
-          </>
-        ) : (
-          <>
-            <Play className="w-5 h-5 mr-2 fill-current" />
-            Keresés Indítása
-          </>
-        )}
-      </button>
     </motion.div>
   );
 };

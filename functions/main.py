@@ -8,6 +8,7 @@ import io
 import base64
 import re
 import os
+import traceback
 
 # Initialize once globally
 initialize_app()
@@ -17,9 +18,8 @@ target_db = None
 try:
     key_path = os.path.join(os.path.dirname(__file__), 'target_db_key.json')
     if os.path.exists(key_path):
-        cred = credentials.Certificate(key_path)
-        target_app = initialize_app(cred, name='target_db')
-        target_db = firestore.client(app=target_app)
+        from google.cloud import firestore as gcp_firestore
+        target_db = gcp_firestore.Client.from_service_account_json(key_path)
         print("Successfully connected to target_db")
     else:
         print(f"Warning: {key_path} not found. Target DB sync will fail.")
@@ -87,7 +87,7 @@ def handle_invoice_parser(service, parameters):
     Searches for 'számla' from a target email, downloads the PDF attachments,
     parses them, and syncs missing ones to the target database.
     """
-    target_email = parameters.get('email', '').strip()
+    target_email = parameters.get('sender_email', '').strip()
     if not target_email:
         return "Kérlek, add meg a feladó e-mail címét a kereséshez!"
         
@@ -208,11 +208,11 @@ def handle_invoice_parser(service, parameters):
                 print(f"Error parsing date {invoice_date_norm}: {e}")
                 continue
 
-            # Check if invoice already exists in target_db
+            # Check if invoice already exists in target_db (by month + year + amount)
             invoices_ref = target_db.collection('invoices')
-            query = invoices_ref.where(filter=FieldFilter('filename', '==', pdf_filename)) \
-                                .where(filter=FieldFilter('target_month', '==', target_month)) \
-                                .where(filter=FieldFilter('target_year', '==', target_year)).limit(1)
+            query = invoices_ref.where(filter=FieldFilter('target_month', '==', target_month)) \
+                                .where(filter=FieldFilter('target_year', '==', target_year)) \
+                                .where(filter=FieldFilter('amount', '==', amount)).limit(1)
             
             existing_docs = list(query.stream())
             
@@ -243,6 +243,8 @@ def handle_invoice_parser(service, parameters):
         return output
         
     except Exception as e:
+        err_msg = traceback.format_exc()
+        print(f"Error in handle_invoice_parser: {err_msg}")
         return f"Hiba a PDF számla feldolgozásakor: {e}"
 
 def execute_script(script_config, db):
@@ -300,9 +302,34 @@ def scheduler_engine(event: scheduler_fn.ScheduledEvent) -> None:
         script_data['doc_id'] = doc.id
         
         last_run = script_data.get('last_run')
-        interval = script_data.get('interval_minutes', 60)
+        start_time_str = script_data.get('start_time')
         
+        # Determine interval in minutes
+        schedule_type = script_data.get('schedule_type')
+        schedule_value = script_data.get('schedule_value', 60)
+        
+        if schedule_type == 'minutes':
+            interval = schedule_value
+        elif schedule_type == 'hours':
+            interval = schedule_value * 60
+        elif schedule_type == 'days':
+            interval = schedule_value * 60 * 24
+        else:
+            interval = script_data.get('interval_minutes', 60) # Fallback to legacy
+            
         should_run = False
+        
+        # Check start_time constraint
+        if start_time_str:
+            try:
+                start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                if start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=timezone.utc)
+                if now < start_time:
+                    continue # Too early to run
+            except Exception as e:
+                print(f"Error parsing start_time {start_time_str}: {e}")
+                
         if not last_run:
             should_run = True
         else:

@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 .firebase/
 firebase-debug.log
+functions/target_db_key.json
