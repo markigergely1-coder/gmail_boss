@@ -23,3 +23,78 @@ body {
     radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.15) 0px, transparent 50%);
   background-attachment: fixed;
 }
+
+/* Print Styles for 1-Page A4 CV */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm 8mm 10mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    background-image: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Hide everything outside of print container */
+  header,
+  nav,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  #cv-a4-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    color: #0f172a !important;
+    background: #ffffff !important;
+  }
+
+  #cv-a4-sheet * {
+    color: #0f172a !important;
+  }
+
+  .cv-content-styled h1 {
+    font-size: 15pt !important;
+    border-bottom: 2pt solid #0f172a !important;
+    padding-bottom: 4pt !important;
+    margin-bottom: 6pt !important;
+  }
+
+  .cv-content-styled h2 {
+    font-size: 10pt !important;
+    color: #4338ca !important;
+    border-bottom: 1pt solid #cbd5e1 !important;
+    margin-top: 6pt !important;
+    margin-bottom: 3pt !important;
+    padding-bottom: 2pt !important;
+    break-after: avoid;
+  }
+
+  .cv-content-styled p {
+    font-size: 9pt !important;
+    line-height: 1.35 !important;
+    margin-bottom: 4pt !important;
+  }
+
+  .cv-content-styled ul {
+    font-size: 8.8pt !important;
+    line-height: 1.32 !important;
+    margin-bottom: 4pt !important;
+    padding-left: 14pt !important;
+  }
+
+  .cv-content-styled li {
+    margin-bottom: 1.5pt !important;
+    break-inside: avoid;
+  }
+}

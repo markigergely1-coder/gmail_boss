@@ -5,15 +5,18 @@ import type { ScriptConfig } from './types';
 import { ScriptCard } from './components/ScriptCard';
 import { CreateScriptModal } from './components/CreateScriptModal';
 import { InvoiceMerger } from './components/InvoiceMerger';
-import { Inbox, Settings, Activity, Plus, FileText, Code2 } from 'lucide-react';
+import { Inbox, Settings, Activity, Plus, FileText, Code2, Brain, Briefcase, Compass } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { NeuralNetworkTab } from './components/NeuralNetworkTab';
+import { CvGeneratorTab } from './components/CvGeneratorTab';
+import { MathTab } from './components/MathTab';
 
 function App() {
   const [scripts, setScripts] = useState<ScriptConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'scripts' | 'merger'>('scripts');
+  const [activeTab, setActiveTab] = useState<'scripts' | 'merger' | 'ai' | 'cv' | 'math'>('math');
 
   useEffect(() => {
     const q = query(collection(db, 'scripts_config'));
@@ -43,7 +46,7 @@ function App() {
   return (
     <div className="min-h-screen p-6 md:p-12 max-w-7xl mx-auto">
       {/* Header */}
-      <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <header className="mb-12 flex flex-col md:flex-row md:items-center justify-between gap-6 no-print">
         <div>
           <motion.div 
             initial={{ opacity: 0, y: -20 }}
@@ -78,10 +81,32 @@ function App() {
       </header>
 
       {/* Tabs */}
-      <div className="flex space-x-4 mb-8">
+      <div className="flex flex-wrap gap-3 mb-8 no-print">
+        <button
+          onClick={() => setActiveTab('math')}
+          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all cursor-pointer ${
+            activeTab === 'math' 
+              ? 'bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25 ring-1 ring-cyan-400/40' 
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+          }`}
+        >
+          <Compass className="w-5 h-5 mr-2 text-cyan-400" />
+          Matek Tab (Trigonometria)
+        </button>
+        <button
+          onClick={() => setActiveTab('cv')}
+          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all cursor-pointer ${
+            activeTab === 'cv' 
+              ? 'bg-gradient-to-r from-brand-600 to-indigo-600 text-white shadow-lg shadow-brand-500/20' 
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+          }`}
+        >
+          <Briefcase className="w-5 h-5 mr-2" />
+          CV Szabó (AI)
+        </button>
         <button
           onClick={() => setActiveTab('scripts')}
-          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all ${
+          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all cursor-pointer ${
             activeTab === 'scripts' 
               ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
               : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
@@ -92,7 +117,7 @@ function App() {
         </button>
         <button
           onClick={() => setActiveTab('merger')}
-          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all ${
+          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all cursor-pointer ${
             activeTab === 'merger' 
               ? 'bg-brand-600 text-white shadow-lg shadow-brand-500/20' 
               : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
@@ -101,11 +126,28 @@ function App() {
           <FileText className="w-5 h-5 mr-2" />
           Számla Egyesítő
         </button>
+        <button
+          onClick={() => setActiveTab('ai')}
+          className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all cursor-pointer ${
+            activeTab === 'ai' 
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' 
+              : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+          }`}
+        >
+          <Brain className="w-5 h-5 mr-2" />
+          Neurális Háló Labor
+        </button>
       </div>
 
       {/* Main Content */}
       <main>
-        {activeTab === 'merger' ? (
+        {activeTab === 'math' ? (
+          <MathTab />
+        ) : activeTab === 'cv' ? (
+          <CvGeneratorTab />
+        ) : activeTab === 'ai' ? (
+          <NeuralNetworkTab />
+        ) : activeTab === 'merger' ? (
           <InvoiceMerger />
         ) : loading ? (
           <div className="flex items-center justify-center h-64">

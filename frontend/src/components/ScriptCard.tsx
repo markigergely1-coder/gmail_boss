@@ -39,6 +39,14 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
     script.parameters?.retroactive || false
   );
 
+  // Job Assistant UI State
+  const [jobSearchQuery, setJobSearchQuery] = useState(
+    script.parameters?.search_query || 'subject:("jelentkezés" OR "application" OR "interjú" OR "interview")'
+  );
+  const [jobChatId, setJobChatId] = useState(
+    script.parameters?.telegram_chat_id || ""
+  );
+
   // Advanced Scheduling UI State
   const [scheduleType, setScheduleType] = useState<ScheduleType>(
     script.schedule_type || 'minutes'
@@ -77,6 +85,13 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
             parameters: {
               sender_email: invoiceEmail,
               retroactive: invoiceRetroactive,
+            },
+          });
+        } else if (script.script_id === 'job_assistant') {
+          await updateDoc(scriptRef, {
+            parameters: {
+              search_query: jobSearchQuery,
+              telegram_chat_id: jobChatId,
             },
           });
         }
@@ -150,6 +165,13 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
           parameters: {
             sender_email: invoiceEmail,
             retroactive: invoiceRetroactive,
+          },
+        });
+      } else if (script.script_id === 'job_assistant') {
+        await updateDoc(scriptRef, {
+          parameters: {
+            search_query: jobSearchQuery,
+            telegram_chat_id: jobChatId,
           },
         });
       } else {
@@ -414,6 +436,29 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({ script }) => {
                       ? 'Bekapcsolva: Az utolsó 10 "számla" tárgyú levelet nézi végig, hogy bepótolja a hiányzókat.'
                       : 'Kikapcsolva: Csak a legfrissebb számlát ellenőrzi a leggyorsabb működés érdekében.'}
                   </p>
+                </div>
+              ) : script.script_id === 'job_assistant' ? (
+                <div className="space-y-3 bg-slate-900/80 rounded-xl border border-slate-800 p-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Gmail Keresési Feltétel</label>
+                    <input
+                      type="text"
+                      value={jobSearchQuery}
+                      onChange={(e) => setJobSearchQuery(e.target.value)}
+                      placeholder='pl. subject:("jelentkezés" OR "interjú")'
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Telegram Chat ID</label>
+                    <input
+                      type="text"
+                      value={jobChatId}
+                      onChange={(e) => setJobChatId(e.target.value)}
+                      placeholder="Ide kapod az értesítéseket"
+                      className="w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+                    />
+                  </div>
                 </div>
               ) : (
                 <textarea

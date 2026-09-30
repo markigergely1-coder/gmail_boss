@@ -124,6 +124,7 @@ export const CreateScriptModal: React.FC<CreateScriptModalProps> = ({ isOpen, on
                     >
                       <option value="test_script">E-mail Szűrő (test_script)</option>
                       <option value="invoice_parser">Csatolmány Számla Olvasó (invoice_parser)</option>
+                      <option value="job_assistant">Álláskereső Asszisztens (job_assistant)</option>
                     </select>
                   </div>
                   

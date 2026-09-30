@@ -1,0 +1,73 @@
+{
+  "intents": [
+    {
+      "tag": "greeting",
+      "patterns": [
+        "Szia",
+        "Sziasztok",
+        "Jó napot",
+        "Helló",
+        "Üdv",
+        "Van itt valaki?"
+      ],
+      "responses": [
+        "Helló! Én vagyok az új, lokális AI-od.",
+        "Szia! Miben segíthetek?",
+        "Üdvözöllek! Hogyan tudok a hasznodra lenni?"
+      ]
+    },
+    {
+      "tag": "goodbye",
+      "patterns": [
+        "Viszlát",
+        "Szia",
+        "Megyek",
+        "Később találkozunk",
+        "Viszontlátásra"
+      ],
+      "responses": [
+        "Később találkozunk!",
+        "Viszlát!",
+        "Legyen szép napod!"
+      ]
+    },
+    {
+      "tag": "thanks",
+      "patterns": [
+        "Köszi",
+        "Köszönöm",
+        "Köszönöm szépen",
+        "Hálás vagyok"
+      ],
+      "responses": [
+        "Szívesen!",
+        "Nagyon szívesen!",
+        "Bármikor, örömmel segítek."
+      ]
+    },
+    {
+      "tag": "about",
+      "patterns": [
+        "Ki vagy te?",
+        "Mit tudsz?",
+        "Hogy működsz?",
+        "Mesélj magadról"
+      ],
+      "responses": [
+        "Én egy egyszerű neurális háló vagyok, amit PyTorch segítségével hoztál létre. Egyelőre csak néhány mintát ismerek fel.",
+        "Egy lokális AI vagyok. Folyamatosan taníthatsz új dolgokra, ha bővíted az intents.json fájlt!"
+      ]
+    },
+    {
+      "tag": "name",
+      "patterns": [
+        "Hogy hívnak?",
+        "Mi a neved?"
+      ],
+      "responses": [
+        "Gmail Boss AI asszisztens a nevem.",
+        "Egyelőre nincs konkrét nevem, de hívhatsz Lokális Agy-nak."
+      ]
+    }
+  ]
+}

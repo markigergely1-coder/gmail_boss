@@ -79,70 +79,47 @@ export function InvoiceMerger() {
           const page = await pdf.getPage(pageNum);
           const textContent = await page.getTextContent();
           
-          const items = textContent.items.map((item: any) => ({
-            str: item.str,
-            x: item.transform[4],
-            y: item.transform[5]
-          }));
-          
-          // Group by approximate y coordinate to form lines
-          const lines: {y: number, items: any[]}[] = [];
-          items.forEach(item => {
-            const line = lines.find(l => Math.abs(l.y - item.y) < 5);
-            if (line) {
-              line.items.push(item);
-            } else {
-              lines.push({ y: item.y, items: [item] });
-            }
-          });
-          
-          // Sort lines from top to bottom (y is usually from bottom to top in PDF, so sort descending)
-          lines.sort((a, b) => b.y - a.y);
-          
-          lines.forEach(line => {
-            // Sort items in line from left to right
-            line.items.sort((a, b) => a.x - b.x);
-            const lineStr = line.items.map(i => i.str).join(' ').trim();
-            fullText += lineStr + '\n';
-          });
+          // Just get all strings in reading order
+          const pageText = textContent.items.map((item: any) => item.str).join(' ');
+          fullText += pageText + ' ';
         }
 
-        const lines = fullText.split('\n');
+        // Clean up multiple spaces
+        fullText = fullText.replace(/\s+/g, ' ');
         
-        console.log("PDF Full Text:\n", fullText); // Debugging info in console
+        console.log("PDF Full Text Joined:\n", fullText); // Debugging
         
-        for (const line of lines) {
-            if (line.trim() === '' || line.toLowerCase().includes('generálva') || line.toLowerCase().includes('havi röplabda elszámolás')) {
+        // Split the entire text by "Ft"
+        const parts = fullText.split(/Ft/i);
+        
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          
+          // Look for [Name] [Participation] [Amount] at the end of the string
+          // Participation is usually a 1 or 2 digit number.
+          const match = part.match(/(.*?)\s+(\d{1,2})\s+([\d\s]+)\s*$/);
+          
+          if (match) {
+            let rawName = match[1];
+            
+            // Clean up rawName. It might contain previous header text if it's the first row.
+            // "Fizetendő" (or "Fizetendö") is the last word in the header.
+            const nameSplits = rawName.split(/fizetend[öő]/i);
+            let name = nameSplits[nameSplits.length - 1].trim();
+            
+            // If name has "generálva" or "összesen", we might want to skip it
+            if (name.toLowerCase().includes('összesen') || name.trim() === '') {
                 continue;
             }
 
-            // Try to match "Name 1 2034 Ft"
-            const match = line.match(/^(.+?)\s+(\d+)\s+([\d\s]+)\s*Ft/i);
-            if (match) {
-              const name = match[1].trim();
-              if (name.toLowerCase().includes('név') || name.toLowerCase().includes('részvétel')) continue;
-              
-              const participation = parseInt(match[2].trim(), 10);
-              const amountStr = match[3].replace(/\s/g, '');
-              const amount = parseInt(amountStr, 10);
-              
-              if (!isNaN(participation) && !isNaN(amount)) {
-                allRows.push({ name, participation, amount });
-              }
-            } else {
-                const looseMatch = line.match(/(.+?)\s+(\d+)\s+([\d\s]+)\s*Ft/i);
-                if (looseMatch) {
-                  const name = looseMatch[1].trim();
-                  if (name.toLowerCase().includes('név') || name.toLowerCase().includes('részvétel')) continue;
-                  
-                  const participation = parseInt(looseMatch[2].trim(), 10);
-                  const amountStr = looseMatch[3].replace(/\s/g, '');
-                  const amount = parseInt(amountStr, 10);
-                  if (!isNaN(participation) && !isNaN(amount)) {
-                    allRows.push({ name, participation, amount });
-                  }
-                }
+            const participation = parseInt(match[2].trim(), 10);
+            const amountStr = match[3].replace(/\s/g, '');
+            const amount = parseInt(amountStr, 10);
+            
+            if (!isNaN(participation) && !isNaN(amount)) {
+              allRows.push({ name, participation, amount });
             }
+          }
         }
         
         fileObj.status = 'success';

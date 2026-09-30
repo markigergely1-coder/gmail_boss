@@ -9,6 +9,8 @@ import base64
 import re
 import os
 import traceback
+import google.generativeai as genai
+import requests
 
 # Initialize once globally
 initialize_app()
@@ -247,6 +249,102 @@ def handle_invoice_parser(service, parameters):
         print(f"Error in handle_invoice_parser: {err_msg}")
         return f"Hiba a PDF számla feldolgozásakor: {e}"
 
+def get_api_keys():
+    db = firestore.client()
+    doc = db.collection('config').document('api_keys').get()
+    if not doc.exists:
+        raise Exception("API keys not found in Firestore. Please run upload_api_keys.py")
+    return doc.to_dict()
+
+def handle_job_assistant(service, parameters, script_config, db):
+    try:
+        keys = get_api_keys()
+        gemini_key = keys.get('gemini_api_key')
+        telegram_token = keys.get('telegram_bot_token')
+        
+        if not gemini_key or not telegram_token:
+            return "Hiba: Hiányzó Gemini vagy Telegram API kulcs!"
+            
+        search_query = parameters.get('search_query', 'subject:("jelentkezés" OR "application" OR "interjú" OR "interview")').strip()
+        chat_id = parameters.get('telegram_chat_id', '').strip()
+        
+        if not chat_id:
+            return "Hiba: Hiányzó Telegram Chat ID!"
+            
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        processed_ids = script_config.get('processed_msg_ids', [])
+        
+        # Search Gmail
+        results = service.users().messages().list(userId='me', q=search_query, maxResults=10).execute()
+        messages = results.get('messages', [])
+        
+        newly_processed = 0
+        notified = 0
+        
+        for msg_item in messages:
+            msg_id = msg_item['id']
+            if msg_id in processed_ids:
+                continue
+                
+            msg = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+            
+            headers = msg.get('payload', {}).get('headers', [])
+            subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), "Nincs tárgy")
+            sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), "Ismeretlen")
+            
+            def get_body(payload):
+                if 'parts' in payload:
+                    for part in payload['parts']:
+                        if part['mimeType'] == 'text/plain':
+                            return base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+                        elif 'parts' in part:
+                            res = get_body(part)
+                            if res: return res
+                elif payload.get('mimeType') == 'text/plain' and 'data' in payload.get('body', {}):
+                    return base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8')
+                return ""
+                
+            body_text = get_body(msg.get('payload', {}))
+            if not body_text:
+                body_text = msg.get('snippet', '')
+                
+            prompt = f"""
+Te egy karrier asszisztens vagy. Az alábbi email egy lehetséges válasz egy állásjelentkezésre.
+Döntsd el, hogy ez valóban egy cégtől/recruitertől érkezett válasz-e a jelentkezésre (pl. interjú behívó, elutasítás, tesztfeladat, stb).
+Ha IGEN, írj egy maximum 2 mondatos magyar összefoglalót róla, ami a lényeget tartalmazza.
+Ha NEM (pl. hírlevél, reklám, automata visszaigazolás a jelentkezés BEÉRKEZÉSÉRŐL, vagy nem állással kapcsolatos), akkor CSAK annyit válaszolj, hogy: NEM.
+
+Email feladója: {sender}
+Email tárgya: {subject}
+Email tartalma:
+{body_text[:3000]}
+"""
+            response = model.generate_content(prompt)
+            reply = response.text.strip()
+            
+            if reply != "NEM" and not reply.startswith("NEM."):
+                telegram_url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+                msg_text = f"🚀 **Új állás válasz érkezett!**\n\n**Feladó:** {sender}\n**Tárgy:** {subject}\n\n**Összefoglaló:**\n{reply}"
+                requests.post(telegram_url, json={'chat_id': chat_id, 'text': msg_text, 'parse_mode': 'Markdown'})
+                notified += 1
+                
+            processed_ids.append(msg_id)
+            newly_processed += 1
+            
+        if newly_processed > 0:
+            processed_ids = processed_ids[-50:]
+            doc_ref = db.collection('scripts_config').document(script_config.get('doc_id'))
+            doc_ref.update({'processed_msg_ids': processed_ids})
+            
+        return f"Álláskereső asszisztens lefutott. {newly_processed} új levél ellenőrizve, {notified} értesítés küldve."
+        
+    except Exception as e:
+        err_msg = traceback.format_exc()
+        print(f"Error in handle_job_assistant: {err_msg}")
+        return f"Hiba az asszisztens futtatásakor: {e}"
+
 def execute_script(script_config, db):
     """
     Executes the actual Gmail logic based on the script ID and updates last_run and last_output.
@@ -267,6 +365,8 @@ def execute_script(script_config, db):
             output_msg = handle_test_script(service, parameters)
         elif script_id == 'invoice_parser':
             output_msg = handle_invoice_parser(service, parameters)
+        elif script_id == 'job_assistant':
+            output_msg = handle_job_assistant(service, parameters, script_config, db)
         else:
             output_msg = f"Unknown script_id: {script_id}"
             
