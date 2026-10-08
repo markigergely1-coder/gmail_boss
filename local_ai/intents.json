@@ -7,13 +7,20 @@
         "Sziasztok",
         "Jó napot",
         "Helló",
+        "Hello",
         "Üdv",
-        "Van itt valaki?"
+        "Üdvözöllek",
+        "Hali",
+        "Szevasz",
+        "Csá",
+        "Van itt valaki?",
+        "Jó reggelt",
+        "Jó estét"
       ],
       "responses": [
-        "Helló! Én vagyok az új, lokális AI-od.",
-        "Szia! Miben segíthetek?",
-        "Üdvözöllek! Hogyan tudok a hasznodra lenni?"
+        "Helló! Én vagyok a Gmail Boss lokális neurális háló asszisztense. Miben segíthetek ma?",
+        "Szia! Örülök, hogy itt vagy. Kérdezz bátran az alkalmazásról vagy a modulokról!",
+        "Üdvözöllek a Neurális Háló Laborban! Készen állok a válaszadásra."
       ]
     },
     {
@@ -23,12 +30,16 @@
         "Szia",
         "Megyek",
         "Később találkozunk",
-        "Viszontlátásra"
+        "Viszontlátásra",
+        "Cső",
+        "Búcsúzom",
+        "Léptem",
+        "Köszi mára ennyi"
       ],
       "responses": [
-        "Később találkozunk!",
-        "Viszlát!",
-        "Legyen szép napod!"
+        "Viszontlátásra! Ha bármikor segítségre van szükséged, itt találsz.",
+        "Viszlát, szép napot és sikeres munkát kívánok!",
+        "Később találkozunk! A modell bármikor készen áll a folytatásra."
       ]
     },
     {
@@ -37,12 +48,17 @@
         "Köszi",
         "Köszönöm",
         "Köszönöm szépen",
-        "Hálás vagyok"
+        "Hálás vagyok",
+        "Nagyon köszönöm",
+        "Szuper vagy",
+        "Zseniális",
+        "Király vagy",
+        "Kösz"
       ],
       "responses": [
-        "Szívesen!",
-        "Nagyon szívesen!",
-        "Bármikor, örömmel segítek."
+        "Nagyon szívesen! Örömmel segítettem.",
+        "Szívesen! Mindig itt vagyok, ha újabb kérdésed adódna.",
+        "Örülök, hogy a hasznodra lehettem! Fordulj hozzám bizalommal máskor is."
       ]
     },
     {
@@ -51,22 +67,143 @@
         "Ki vagy te?",
         "Mit tudsz?",
         "Hogy működsz?",
-        "Mesélj magadról"
+        "Mesélj magadról",
+        "Milyen modell vagy?",
+        "Hogyan tanítottak?",
+        "Milyen technológiát használsz?",
+        "Mi a működési elved?"
       ],
       "responses": [
-        "Én egy egyszerű neurális háló vagyok, amit PyTorch segítségével hoztál létre. Egyelőre csak néhány mintát ismerek fel.",
-        "Egy lokális AI vagyok. Folyamatosan taníthatsz új dolgokra, ha bővíted az intents.json fájlt!"
+        "Én egy PyTorch alapú, 3 rétegű előrecsatolt neurális hálózat (Feed-Forward Neural Network) vagyok, magyar nyelvű Snowball szótövesítéssel felvértezve.",
+        "A helyi gépeden futok! A mondataidat szótövekre bontom (Stemming + Bag-of-Words), majd a mély neurális hálóm kiszámítja a szándékodat (Intent Classification).",
+        "Egy lokális AI agy vagyok a Gmail Boss rendszerben. Nem függök külső felhős szerverektől a működéshez, saját súlyokkal rendelkezem a data.pth fájlban."
       ]
     },
     {
       "tag": "name",
       "patterns": [
         "Hogy hívnak?",
-        "Mi a neved?"
+        "Mi a neved?",
+        "Ki vagy?",
+        "Van neved?",
+        "Hogyan szólíthatlak?"
       ],
       "responses": [
-        "Gmail Boss AI asszisztens a nevem.",
-        "Egyelőre nincs konkrét nevem, de hívhatsz Lokális Agy-nak."
+        "A nevem Gmail Boss Brain – a rendszer saját neurális háló asszisztense.",
+        "Hívhatsz Brain-nek vagy Lokális Agy-nak. A Gmail Boss ökoszisztéma motorjaként dolgozom."
+      ]
+    },
+    {
+      "tag": "capabilities",
+      "patterns": [
+        "Miben tudsz segíteni?",
+        "Mik a képességeid?",
+        "Mit csinál ez az alkalmazás?",
+        "Mi ez a rendszer?",
+        "Milyen funkciók vannak?",
+        "Mit tud az app?"
+      ],
+      "responses": [
+        "A Gmail Boss ökoszisztéma 4 fő pillérből áll: 1) Gmail automatizációk és számlafeldolgozó, 2) CV Szabó AI modul, 3) Interaktív Trigonometria Labor, 4) Saját Neurális Háló Csevegő és Tanító Stúdió.",
+        "Segítek eligazodni az automatizációk, az álláskereső asszisztens, a számlák egyesítése és a matematikai szemléltető modul között!"
+      ]
+    },
+    {
+      "tag": "invoice_parser",
+      "patterns": [
+        "Számlafeldolgozó",
+        "Számla egyesítő",
+        "Hogyan működik a számlázó?",
+        "Hol találom a számlákat?",
+        "PDF számla feldolgozás",
+        "Mesélj a számla modulról",
+        "Számla egyesítés",
+        "Mi az az invoice merger?"
+      ],
+      "responses": [
+        "A Számla Egyesítő modul átvizsgálja a Gmailben érkező PDF számlákat, kinyeri a tételeket, az összegeket és a fizetési adatokat, majd összesített táblázatot és PDF jelentést készít belőlük.",
+        "A Számla Egyesítő fülön kézzel is feltölthetsz PDF számlákat, vagy az Automatizációk fülön beállíthatod, hogy a háttérben automatikusan feldolgozza az új emaileket!"
+      ]
+    },
+    {
+      "tag": "cv_generator",
+      "patterns": [
+        "CV Szabó",
+        "Önéletrajz készítő",
+        "Hogyan működik a CV generátor?",
+        "AI önéletrajz",
+        "ATS barát önéletrajz",
+        "Hogyan tölthetem le a CV-t?",
+        "Karrier modul",
+        "Önéletrajz formázás"
+      ],
+      "responses": [
+        "A CV Szabó (AI) modul segítségével a mesterprofilod alapján egyetlen kattintással generálhatsz célzott, ATS-barát, pontosan 1 oldalas A4 PDF önéletrajzot bármilyen konkrét álláshirdetéshez!",
+        "A CV Szabó modul a Gemini AI-t használja az állásleírás elemzéséhez, és a tapasztalataidat úgy súlyozza, hogy maximális eséllyel juss be az interjúra."
+      ]
+    },
+    {
+      "tag": "math_tab",
+      "patterns": [
+        "Matek fül",
+        "Trigonometria",
+        "Egységsugarú kör",
+        "Szinusz koszinusz",
+        "Hogyan működik a matek tab?",
+        "Mutasd a szinuszt",
+        "Tangens görbe",
+        "Mi az a matek labor?"
+      ],
+      "responses": [
+        "A Matek Tab (Trigonometria) egy interaktív oktatóeszköz: az egységsugarú körben közvetlenül húzhatod a sugarat, miközben élőben látod a sin, cos és tan szakaszok kiemelését és a függvényhullám képződését!",
+        "A Matek fülön van forgatás-animáció, nevezetes szög gyorsválasztó (30°, 45°, 60°, 90°...), pontos törtes/gyökös érték kijelzés és egy teljes képletgyűjtemény is."
+      ]
+    },
+    {
+      "tag": "gmail_automation",
+      "patterns": [
+        "Email automatizáció",
+        "Gmail szkriptek",
+        "Hogyan működnek a szkriptek?",
+        "Időzített feladatok",
+        "Automatizált ellenőrzés",
+        "Új szkript hozzáadása",
+        "Cron futtatás"
+      ],
+      "responses": [
+        "Az Automatizációk fülön testreszabható szkripteket kezelhetsz (pl. álláskereső asszisztens, teszt kereső, számlaellenőrző). Ezek 5 percenként futnak a Firebase Cloud Functions háttérben, vagy kézzel is indíthatók.",
+        "A szkriptek állapotát (MANUAL / AUTO / PAUSED) és a legutóbbi futás kimenetét bármikor nyomon követheted a műszerfalon."
+      ]
+    },
+    {
+      "tag": "training",
+      "patterns": [
+        "Hogyan taníthatlak?",
+        "Hogyan működik a tanítás?",
+        "Újratanítás",
+        "Neurális hálózat tanítása",
+        "Hogyan bővíthetem a tudásod?",
+        "Tanítsalak?",
+        "Új minták hozzáadása"
+      ],
+      "responses": [
+        "A Neurális Háló Labor Tanító Stúdiójában közvetlenül a felületről adhatsz hozzá új témákat és mintamondatokat, majd az 'Újratanítás' gombra kattintva a háló azonnal újratanulja az adatokat!",
+        "A tanítás során a PyTorch optimalizáló (Adam) 1000 cikluson (Epoch) keresztül minimalizálja a hibát (Loss), amíg a háló biztosan fel nem ismeri a szándékaidat."
+      ]
+    },
+    {
+      "tag": "help",
+      "patterns": [
+        "Segítség",
+        "Nem tudom mit csináljak",
+        "Segíts kérlek",
+        "Útmutató",
+        "Hogyan kezdjem el?",
+        "Help"
+      ],
+      "responses": [
+        "Itt vagyok, miben akadtál el? Kérdezz a CV készítésről, a számlákról, az automatizációkról vagy a neurális háló tanításáról!",
+        "Válassz a felső fülek közül: 'Automatizációk' a szkriptekhez, 'Számla Egyesítő' a pénzügyekhez, 'CV Szabó' a karrieredhez, 'Matek Tab' a tanuláshoz, vagy maradj itt a Laborban velem!"
       ]
     }
   ]

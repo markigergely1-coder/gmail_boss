@@ -8,7 +8,11 @@ def tokenize(sentence):
     """
     Kettévágja a mondatot szavakra (tokenekre)
     """
-    return nltk.word_tokenize(sentence, language='hungarian')
+    try:
+        return nltk.word_tokenize(sentence)
+    except Exception:
+        import re
+        return re.findall(r'\b\w+\b', sentence.lower())
 
 def stem(word):
     """
